@@ -1,5 +1,8 @@
+{-# LANGUAGE TypeFamilies #-}
+
 module Poker where
 import Card
+import GameClass
 import GameMonad
 import Data.List
 import Data.Ord (comparing)
@@ -10,7 +13,8 @@ data HandType = HighCard | OnePair | TwoPairs |
 			FullHouse | FourOfAKind | StraightFlush | RoyalFlush
 			deriving (Ord, Eq, Show)
 
-type Hand = (HandType, [Card])
+type Hand 		= (HandType, [Card])
+newtype PokerHand	= PokerHand {getPairOfHands :: (Hand, Hand)}
 
 {- ******* Вспомогательные функции ******* -}
 -- Превращает список карт из файла в список десяток
@@ -44,12 +48,12 @@ makePairs ys = map (\xs -> (take 5 xs, drop 5 xs)) ys
 readCardList :: [String] -> [([Card], [Card])]
 readCardList  = makePairs . makeTens . map readCard
 
-putToMonad :: [([Card], [Card])] -> [Game Int ([Card], [Card])]
+putToMonad :: [([Card], [Card])] -> [Game ([Card], [Card])]
 putToMonad = map return
 
 --Составление пары ставок
-makeHand :: ([Card], [Card]) -> Game Int (Hand, Hand)
-makeHand (a, b) = return (identHand a, identHand b)
+makeHand :: ([Card], [Card]) -> Game PokerHand
+makeHand (a, b) = return (PokerHand (identHand a, identHand b))
 
 -- Список достоинств
 valList :: [Card] -> [Value]
@@ -141,22 +145,28 @@ secondDecideTheWinner xs ys =
 						if localHighestCard xs > localHighestCard ys
 						then PnWon 1 else PnWon 2
 
-firstCheck :: (Hand, Hand) -> Game Int (Hand, Hand)
-firstCheck hand@((a1, xs), (a2, ys)) 
-	| a1 `elem` [HighCard, Flush, Straight, StraightFlush]
-				= firstDecideTheWinner xs ys
-	| otherwise = return hand
+firstCheck :: PokerHand -> Game PokerHand
+firstCheck a = firstCheck' $ getPairOfHands a
+	where 
+		firstCheck' hand@((a1, xs), (a2, ys)) 
+			| a1 `elem` [HighCard, Flush, Straight, StraightFlush]
+						= firstDecideTheWinner xs ys
+			| otherwise = return a
 
-secondCheck :: (Hand, Hand) -> Game Int (Hand, Hand)
-secondCheck hand@((a1, xs), (a2, ys))
-	| a1 `elem` [OnePair, ThreeOfAKind, FourOfAKind]
-				= secondDecideTheWinner xs ys
-	| otherwise = return hand
+secondCheck :: PokerHand -> Game PokerHand
+secondCheck a = secondCheck' $ getPairOfHands a
+	where
+		secondCheck' hand@((a1, xs), (a2, ys))
+			| a1 `elem` [OnePair, ThreeOfAKind, FourOfAKind]
+						= secondDecideTheWinner xs ys
+			| otherwise = return a
 
-thirdCheck :: (Hand, Hand) -> Game Int (Hand, Hand)
-thirdCheck hand@((a1, xs), (a2, ys))
-	| a1 == FullHouse 	= compareFullHouse xs ys
-	| otherwise 		= return hand
+thirdCheck :: PokerHand -> Game PokerHand
+thirdCheck a = thirdCheck' $ getPairOfHands a
+	where 
+		thirdCheck' hand@((a1, xs), (a2, ys))
+			| a1 == FullHouse 	= compareFullHouse xs ys
+			| otherwise 		= return a
 
 compareFullHouse xs ys = 
 	case compare (localHighestCard xs) (localHighestCard ys) of
@@ -169,13 +179,18 @@ compareFullHouse xs ys =
 
 --compareHand :: Game PokerHand -> Game PokerHand
 --compareHand :: (PokerHand, PokerHand) -> Game PokerHand
-compareHand :: (Hand, Hand) -> Game Int (Hand, Hand)
-compareHand (h1@(a1, xs), h2@(a2, ys))
-	| a1 < a2 			= PnWon 2
-	| a1 > a2 			= PnWon 1
-	| a1 == RoyalFlush	= PnWon 2
-	| otherwise 		= return (h1, h2)
+compareHand :: PokerHand -> Game PokerHand
+compareHand a = compareHand' $ getPairOfHands a
+	where
+		compareHand' (h1@(a1, xs), h2@(a2, ys))
+			| a1 < a2 			= PnWon 2
+			| a1 > a2 			= PnWon 1
+			| a1 == RoyalFlush	= PnWon 2
+			| otherwise 		= return a
 
-decideWinner :: Game Int (Hand, Hand) -> Game Int (Hand, Hand)
-decideWinner a = a `applyAllChecks` [compareHand, firstCheck
+instance PlayGame Game where
+	type GameInfo			= PokerHand
+	getPlayer (PnWon n)		= n
+	getGameInfo (Scoring a)	= a
+	checks					= [compareHand, firstCheck
 									, secondCheck, thirdCheck]
