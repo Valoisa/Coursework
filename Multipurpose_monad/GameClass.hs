@@ -8,13 +8,14 @@ y `foldM` xs = foldl (>>=) y xs
 class (Functor g, Monad g) => PlayGame g where 
 	type Payer g 
 	type Payer g		= Int
-	type GameInfo
-	checks				:: [GameInfo -> g GameInfo]
-	getPlayer			:: g GameInfo -> Payer g
-	getGameInfo			:: g GameInfo -> GameInfo
-	
-	performGame			:: g GameInfo -> g GameInfo
-	performGame	p		= p `foldM` checks
-	
-	decideWinner		:: g GameInfo -> Payer g
-	decideWinner		= getPlayer . performGame
+	type GameInfo g
+	checks				:: [GameInfo g -> g (GameInfo g)]
+	getPlayer			:: g (GameInfo g) -> Payer g
+	getGameInfo			:: g (GameInfo g) -> (GameInfo g)
+
+
+performGame			:: (PlayGame g) => g (GameInfo g) -> g (GameInfo g)
+performGame	p		= p `foldM` checks
+
+decideWinner		:: (PlayGame g) => g (GameInfo g) -> Payer g
+decideWinner		= getPlayer . performGame

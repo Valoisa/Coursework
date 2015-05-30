@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies, FlexibleInstances #-}
 
 module Poker where
 import Card
@@ -15,29 +15,13 @@ data HandType = HighCard | OnePair | TwoPairs |
 
 type Hand 		= (HandType, [Card])
 newtype PokerHand	= PokerHand {getPairOfHands :: (Hand, Hand)}
+type PokerTest = (Hand, Hand)
 
 {- ******* Вспомогательные функции ******* -}
 -- Превращает список карт из файла в список десяток
 makeTens :: [a] -> [[a]]
 makeTens xs = map (take 10) 
 	$ takeWhile (not . null) $ iterate (drop 10) xs
-
--- Чтение одной карты
-readCard :: String -> Card
-readCard xs = Card (readValue $ head xs) (readSuit $ last xs)
-    where
-        readValue a
-            | a == '2'  = C2
-            | a == '3'  = C3
-            | a == '4'  = C4
-            | a == '5'  = C5
-            | a == '6'  = C6
-            | a == '7'  = C7
-            | a == '8'  = C8
-            | a == '9'  = C9
-            | a == 'T'  = C10
-            | otherwise = (read::String -> Value) [a]
-        readSuit b = (read::String -> Suit) [b]
 
 -- Превращает список десяток в список пар, 
 -- элементы которых - пятёрки	(ставки)
@@ -48,11 +32,11 @@ makePairs ys = map (\xs -> (take 5 xs, drop 5 xs)) ys
 readCardList :: [String] -> [([Card], [Card])]
 readCardList  = makePairs . makeTens . map readCard
 
-putToMonad :: [([Card], [Card])] -> [Game ([Card], [Card])]
+putToMonad :: [([Card], [Card])] -> [Game Poker ([Card], [Card])]
 putToMonad = map return
 
 --Составление пары ставок
-makeHand :: ([Card], [Card]) -> Game PokerHand
+makeHand :: ([Card], [Card]) -> Game Poker PokerHand
 makeHand (a, b) = return (PokerHand (identHand a, identHand b))
 
 -- Список достоинств
@@ -139,13 +123,13 @@ identSortedHand xs
 {- *****Монадические функции***** -}
 -- compareEqualHandType разбиваем на три функции
 firstDecideTheWinner xs ys 	= if highestCard xs > highestCard ys then
-								PnWon 1 else PnWon 2
+								Player 1 else Player 2
 
 secondDecideTheWinner xs ys = 
 						if localHighestCard xs > localHighestCard ys
-						then PnWon 1 else PnWon 2
+						then Player 1 else Player 2
 
-firstCheck :: PokerHand -> Game PokerHand
+firstCheck :: PokerHand -> Game Poker PokerHand
 firstCheck a = firstCheck' $ getPairOfHands a
 	where 
 		firstCheck' hand@((a1, xs), (a2, ys)) 
@@ -153,7 +137,7 @@ firstCheck a = firstCheck' $ getPairOfHands a
 						= firstDecideTheWinner xs ys
 			| otherwise = return a
 
-secondCheck :: PokerHand -> Game PokerHand
+secondCheck :: PokerHand -> Game Poker PokerHand
 secondCheck a = secondCheck' $ getPairOfHands a
 	where
 		secondCheck' hand@((a1, xs), (a2, ys))
@@ -161,7 +145,7 @@ secondCheck a = secondCheck' $ getPairOfHands a
 						= secondDecideTheWinner xs ys
 			| otherwise = return a
 
-thirdCheck :: PokerHand -> Game PokerHand
+thirdCheck :: PokerHand -> Game Poker PokerHand
 thirdCheck a = thirdCheck' $ getPairOfHands a
 	where 
 		thirdCheck' hand@((a1, xs), (a2, ys))
@@ -170,27 +154,29 @@ thirdCheck a = thirdCheck' $ getPairOfHands a
 
 compareFullHouse xs ys = 
 	case compare (localHighestCard xs) (localHighestCard ys) of
-		GT	-> PnWon 1
-		LT	-> PnWon 2
-		_	-> if getHighInPair xs > getHighInPair ys then PnWon 1
-				else PnWon 2
+		GT	-> Player 1
+		LT	-> Player 2
+		_	-> if getHighInPair xs > getHighInPair ys then Player 1
+				else Player 2
 	where
 		getHighInPair = head . head . sortGroups
 
---compareHand :: Game PokerHand -> Game PokerHand
---compareHand :: (PokerHand, PokerHand) -> Game PokerHand
-compareHand :: PokerHand -> Game PokerHand
+--compareHand :: Game Poker PokerHand -> Game Poker PokerHand
+--compareHand :: (PokerHand, PokerHand) -> Game Poker PokerHand
+compareHand :: PokerHand -> Game Poker PokerHand
 compareHand a = compareHand' $ getPairOfHands a
 	where
 		compareHand' (h1@(a1, xs), h2@(a2, ys))
-			| a1 < a2 			= PnWon 2
-			| a1 > a2 			= PnWon 1
-			| a1 == RoyalFlush	= PnWon 2
+			| a1 < a2 			= Player 2
+			| a1 > a2 			= Player 1
+			| a1 == RoyalFlush	= Player 2
 			| otherwise 		= return a
 
-instance PlayGame Game where
-	type GameInfo			= PokerHand
-	getPlayer (PnWon n)		= n
-	getGameInfo (Scoring a)	= a
-	checks					= [compareHand, firstCheck
+data Poker
+
+instance PlayGame (Game Poker) where
+	type GameInfo (Game Poker)	= PokerHand
+	getPlayer (Player n)		= n
+	getGameInfo (Scoring a)		= a
+	checks						= [compareHand, firstCheck
 									, secondCheck, thirdCheck]

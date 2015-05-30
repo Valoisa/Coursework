@@ -1,15 +1,14 @@
 module GameMonad where
-import GameClass
 import Control.Monad
 
-data Game a = PnWon Int | Scoring a
+data Game g a = Player Int | Scoring a
 				deriving (Show, Eq, Ord, Read)
 
-instance Functor Game where
+instance Functor (Game g) where
 	fmap f (Scoring a) 	= Scoring (f a)
-	fmap f (PnWon n)	= PnWon n
+	fmap f (Player n)	= Player n
 
-instance Monad Game where
+instance Monad (Game g) where
 	return  			= Scoring 
 	Scoring a 	>>= f	= f a
-	PnWon n		>>= _ 	= PnWon n
+	Player n	>>= _ 	= Player n

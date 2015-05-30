@@ -1,14 +1,25 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies, FlexibleInstances #-}
 
 module Hearts where
 import Card
 import GameClass
 import GameMonad
+import Data.List
 
 type Scores = [Int]
 
 playerN :: Int -> Scores -> Int
 playerN n = last . take n
+
+-- Превращает строку в список взяток
+stringToListOfBribes :: [String] -> [Scores]
+stringToListOfBribes = 	 map (map score)
+						. map (take 4) . takeWhile (\xs -> xs /= [])
+						. iterate (drop 4). map (map readCard) 
+						. map words
+
+placeToMonad :: [Scores] -> [Game Hearts Scores]
+placeToMonad = map return
 
 -- Определяет, сколько очков приносит карта
 cardToPoint :: Card -> Int
@@ -24,26 +35,28 @@ score = sum . map cardToPoint
 -- Проверяет, что кто-то из игроков "прокрутил динамо" 
 -- ("выстрелил в Луну")
 -- (поскольку у нас 36 карт, то очков будет 22, а не 26)
-shootingTheMoon :: Scores -> Game Scores
+shootingTheMoon :: Scores -> Game Hearts Scores
 shootingTheMoon xs
-		| playerN 1 xs	== 22	= PnWon 1
-		| playerN 2 xs	== 22	= PnWon 2
-		| playerN 3 xs	== 22	= PnWon 3
-		| playerN 4 xs	== 22	= PnWon 4
+		| playerN 1 xs	== 22	= Player 1
+		| playerN 2 xs	== 22	= Player 2
+		| playerN 3 xs	== 22	= Player 3
+		| playerN 4 xs	== 22	= Player 4
+		| otherwise				= return xs
 
 -- Определяет победителя, если никто не "прокрутил динамо"
-getWinner :: Scores -> Game Scores 
+getWinner :: Scores -> Game Hearts Scores 
 getWinner xs
-		| minimum xs == playerN 1 xs	= PnWon 1
-		| minimum xs == playerN 2 xs	= PnWon 2
-		| minimum xs == playerN 3 xs	= PnWon 3
-		| minimum xs == playerN 4 xs	= PnWon 4
+		| minimum xs == playerN 1 xs	= Player 1
+		| minimum xs == playerN 2 xs	= Player 2
+		| minimum xs == playerN 3 xs	= Player 3
+		| minimum xs == playerN 4 xs	= Player 4
+		| otherwise						= return xs
 
-instance PlayGame Game where
-	type GameInfo			= Scores
-	getPlayer (PnWon n)		= n
-	getGameInfo (Scoring a)	= a
-	checks					= [shootingTheMoon, getWinner]
+--Определим экземпляр класса PlayGame
+data Hearts
 
-{-decideWinner :: Game Int GameInfo -> Game Int GameInfo
-decideWinner a = a `applyAllChecks` [shootingTheMoon, getWinner]-}
+instance PlayGame (Game Hearts) where
+	type GameInfo (Game Hearts)	= Scores
+	getPlayer (Player n)			= n
+	getGameInfo (Scoring a)		= a
+	checks						= [shootingTheMoon, getWinner]
